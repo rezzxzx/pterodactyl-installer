@@ -2,13 +2,13 @@
 # ==============================================================================
 #  Pterodactyl Installer — action based (install | panel | wings | remove*)
 #  Usage:
-#    bash <(curl -s https://pterodactyl-installer.se) [ACTION] [MODE]
-#  Actions: install (default) | panel | wings | remove | remove-panel
+#    bash <(curl -s https://pterodactyl-installer.vlyzer.app) [ACTION] [MODE]
+#  Actions: install / both | panel | wings | remove | remove-panel
 #           remove-wings | remove-all | help
 #  Modes : --auto / -a   (otomatis, cuma tanya domain)
 #          --manual / -m (detail lengkap)
 # ==============================================================================
-set -uo pipefail
+set -e
 
 SCRIPT_VERSION="1.1.0"
 PANEL_VER="1.11.8"
@@ -31,6 +31,33 @@ err(){ printf "%s[✗]%s %s\n" "$C_R" "$C_N" "$1"; exit 1; }
 spin(){ local pid=$1 msg="$2" marks="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
   while kill -0 "$pid" 2>/dev/null; do for m in ${marks}; do printf "\r%s%s%s %s" "$C_C" "$m" "$C_N" "$msg"; sleep 0.08; done; done
   printf "\r%b[✓]%b %s\n" "$C_G" "$C_N" "$msg"; }
+
+# progress bar visual: [████░░░░] 45%
+bar(){ local pct="${1:-0}" len="${2:-30}" filled=$((pct*len/100)) i s=""
+  for((i=0;i<len;i++)); do if((i<filled)); then s+="█"; else s+="░"; fi; done
+  printf "[%s]" "$s"; }
+
+# download dengan progress bar + persen + nama file (log tetap ke bawah)
+download(){
+  local url="$1" dest="$2" name="${3:-$(basename "$dest")}"
+  local total; total=$(curl -sIL "$url" | grep -i "content-length" | tail -1 | tr -dc '0-9')
+  total=${total:-0}
+  local part="$dest.part"; : > "$part"
+  curl -sL "$url" -o "$part" & local pid=$!
+  local cur=0 pct=0
+  while kill -0 "$pid" 2>/dev/null; do
+    cur=$(stat -c%s "$part" 2>/dev/null || echo 0)
+    pct=0; [[ $total -gt 0 ]] && pct=$((cur*100/total))
+    printf "\r  %s %3d%%  %s  %s" "$(bar $pct)" "$pct" "$name" "$(numfmt_h $cur)/$(numfmt_h $total)"
+    sleep 0.2
+  done
+  wait "$pid"; local rc=$?
+  if [[ $rc -eq 0 && -f "$part" ]]; then mv "$part" "$dest"
+    printf "\r  %s 100%%  %s  %s\n" "$(bar 100)" "$name" "$(numfmt_h $total)"
+  else printf "\r  %s [✗] gagal: %s\n" "$(bar 0)" "$name"; rm -f "$part"; return 1; fi
+}
+numfmt_h(){ local b=${1:-0}; if((b>=1073741824));then printf "%.1fG" $(echo "scale=1;$b/1073741824"|bc 2>/dev/null || echo 0);
+  elif((b>=1048576));then printf "%.1fM" $((b/1048576)); elif((b>=1024));then printf "%dK" $((b/1024)); else echo "${b}B"; fi; }
 
 [[ $EUID -eq 0 ]] || err "Jalankan sebagai root (sudo -i)."
 
@@ -93,8 +120,9 @@ setup_mysql(){
 }
 install_panel(){
   local dir="/var/www/pterodactyl"; log "Download Panel v$PANEL_VER…"
-  mkdir -p "$dir" && cd "$dir"
-  curl -fsSL "https://github.com/pterodactyl/panel/releases/download/v$PANEL_VER/panel.tar.gz" -o panel.tar.gz
+  mkdir -p "$dir"
+  download "https://github.com/pterodactyl/panel/releases/download/v$PANEL_VER/panel.tar.gz" "$dir/panel.tar.gz" "panel v$PANEL_VER"
+  cd "$dir"
   tar -xzf panel.tar.gz && rm panel.tar.gz
   curl -fsSL https://getcomposer.org/installer | php >/dev/null 2>&1
   php composer.phar install --no-dev --optimize-autoloader >/dev/null 2>&1 || true
@@ -132,7 +160,7 @@ EOF
 }
 install_wings(){
   log "Install Wings v$WINGS_VER…"; mkdir -p /etc/pterodactyl
-  curl -fsSL "https://github.com/pterodactyl/wings/releases/download/v$WINGS_VER/wings-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')" -o /usr/local/bin/wings
+  download "https://github.com/pterodactyl/wings/releases/download/v$WINGS_VER/wings-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')" /usr/local/bin/wings "wings v$WINGS_VER"
   chmod +x /usr/local/bin/wings
   NODE_TOKEN="$(openssl rand -hex 32)"
   if [[ -d /var/www/pterodactyl ]]; then
