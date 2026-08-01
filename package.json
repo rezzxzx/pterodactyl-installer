@@ -1,0 +1,35 @@
+{
+  "name": "pterodactyl-installer",
+  "version": "1.0.0",
+  "description": "Clean dual-mode (manual/auto) Pterodactyl Panel + Wings installer for Ubuntu/Debian. Deploy-ready for GitHub & npm.",
+  "bin": {
+    "pterodactyl-installer": "install.sh",
+    "ptinstall": "install.sh"
+  },
+  "scripts": {
+    "install": "echo 'jalankan: npx pterodactyl-installer --auto'",
+    "test": "bash -n install.sh && echo 'syntax ok'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/pterodactyl-installer.git"
+  },
+  "keywords": [
+    "pterodactyl",
+    "game-server",
+    "panel",
+    "wings",
+    "installer",
+    "ubuntu",
+    "debian"
+  ],
+  "author": "your-name",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14"
+  },
+  "files": [
+    "install.sh",
+    "README.md"
+  ]
+}
